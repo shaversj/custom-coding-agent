@@ -2,6 +2,8 @@
 
 A tiny coding-agent CLI built on `@earendil-works/pi-ai` and MiniMax.
 
+See [docs/flow.md](docs/flow.md) for a diagram of the agent loop.
+
 ## Setup
 
 ```bash
