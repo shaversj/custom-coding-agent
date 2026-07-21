@@ -8,6 +8,15 @@ import "dotenv/config";
 import { Type, type Context, type Message, type Tool } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 
+import {
+  forgetMemory,
+  formatMemoriesForDisplay,
+  formatMemoriesForPrompt,
+  loadMemory,
+  rememberProjectNote,
+  saveMemory,
+} from "./memory.js";
+
 type TextToolResult = {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
@@ -21,6 +30,7 @@ const modelId = process.env.MINIMAX_MODEL ?? "MiniMax-M2.7";
 const maxTurns = Number(process.env.AGENT_MAX_TURNS ?? 8);
 
 const initialPrompt = process.argv.slice(2).join(" ").trim();
+const memory = await loadMemory(workspace);
 
 if (!process.env.MINIMAX_API_KEY) {
   console.error("Missing MINIMAX_API_KEY. Copy .env.example to .env and add your MiniMax key.");
@@ -60,12 +70,7 @@ const tools: Tool[] = [
 ];
 
 const context: Context = {
-  systemPrompt: [
-    "You are a very small coding agent.",
-    `Workspace: ${workspace}`,
-    "Use tools to inspect files before changing them.",
-    "Keep changes minimal, explain what you changed, and mention any commands you ran.",
-  ].join("\n"),
+  systemPrompt: buildSystemPrompt(),
   messages: [],
   tools,
 };
@@ -81,7 +86,7 @@ if (!model) {
 const selectedModel = model;
 
 if (initialPrompt) {
-  await askAgent(initialPrompt);
+  await handleInput(initialPrompt);
 } else {
   await startRepl();
 }
@@ -93,11 +98,16 @@ async function startRepl() {
   });
 
   console.log(`MiniMax coding agent ready (${provider}/${modelId}).`);
-  console.log("Type a question or task. Use /exit to quit.\n");
+  console.log("Type a question or task. Use /remember, /memories, /forget, or /exit.\n");
+  const showPrompt = Boolean(process.stdin.isTTY);
+  if (showPrompt) {
+    rl.setPrompt("> ");
+    rl.prompt();
+  }
 
   try {
-    while (true) {
-      const question = (await rl.question("> ")).trim();
+    for await (const line of rl) {
+      const question = line.trim();
 
       if (question === "/exit" || question === "/quit") {
         break;
@@ -107,12 +117,65 @@ async function startRepl() {
         continue;
       }
 
-      await askAgent(question);
+      await handleInput(question);
       console.log("");
+      if (showPrompt) {
+        rl.prompt();
+      }
     }
   } finally {
     rl.close();
   }
+}
+
+async function handleInput(input: string) {
+  if (await handleMemoryCommand(input)) {
+    return;
+  }
+
+  await askAgent(input);
+}
+
+async function handleMemoryCommand(input: string) {
+  if (input === "/memories") {
+    console.log(formatMemoriesForDisplay(memory, workspace));
+    return true;
+  }
+
+  if (input.startsWith("/remember ")) {
+    const text = input.slice("/remember ".length).trim();
+    if (!text) {
+      console.log('Usage: /remember User prefers small, focused changes.');
+      return true;
+    }
+
+    const record = rememberProjectNote(memory, workspace, text);
+    await saveMemory(workspace, memory);
+    updateSystemPrompt();
+    console.log(`Saved memory ${record.id}.`);
+    return true;
+  }
+
+  if (input.startsWith("/forget ")) {
+    const id = input.slice("/forget ".length).trim();
+    if (!id) {
+      console.log("Usage: /forget mem_12345678");
+      return true;
+    }
+
+    const removed = forgetMemory(memory, id);
+    if (removed) {
+      await saveMemory(workspace, memory);
+      updateSystemPrompt();
+      console.log(`Forgot memory ${id}.`);
+    } else {
+      console.log(`No memory found for ${id}.`);
+    }
+
+    return true;
+  }
+
+  return false;
 }
 
 async function askAgent(prompt: string) {
@@ -154,6 +217,23 @@ async function askAgent(prompt: string) {
   }
 
   console.error(`Stopped after ${maxTurns} tool turns. Increase AGENT_MAX_TURNS if needed.`);
+}
+
+function updateSystemPrompt() {
+  context.systemPrompt = buildSystemPrompt();
+}
+
+function buildSystemPrompt() {
+  return [
+    "You are a very small coding agent.",
+    `Workspace: ${workspace}`,
+    "Use tools to inspect files before changing them.",
+    "Keep changes minimal, explain what you changed, and mention any commands you ran.",
+    "Use saved memory as durable user-approved context, but prefer the current user request if it conflicts.",
+    formatMemoriesForPrompt(memory, workspace),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function isToolCallBlock(block: Message["content"][number]): block is ToolCallBlock {

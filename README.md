@@ -50,3 +50,17 @@ The agent exposes a deliberately small coding surface:
 - `run_shell` runs a command in the workspace.
 
 The workspace is locked to the directory where you run the CLI.
+
+## Memory
+
+The agent can remember explicit notes across sessions in `.agent/memory.json`.
+That directory is ignored by git so local memory does not get committed.
+
+```bash
+/remember User prefers small, focused TypeScript changes.
+/memories
+/forget mem_12345678
+```
+
+Saved memories are added to the system prompt as durable context for later
+questions in the same workspace.
