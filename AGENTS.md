@@ -16,6 +16,7 @@ This repo contains a small TypeScript coding-agent CLI built with `@earendil-wor
 - Keep provider/model configuration environment-driven.
 - Do not commit real API keys or `.env`.
 - Preserve both interactive mode (`npm run agent`) and one-shot mode (`npm run agent -- "..."`) when changing CLI behavior.
+- Update `docs/flow.md` when major agent flow, tool orchestration, or session behavior changes.
 
 ## Verification
 
