@@ -20,7 +20,7 @@ This repo contains a small TypeScript coding-agent CLI built with `@earendil-wor
 
 ## Verification
 
-Run `npm run typecheck` after TypeScript changes.
+Run `npm test` and `npm run typecheck` after TypeScript changes.
 
 For CLI startup checks that should not call MiniMax, use:
 
